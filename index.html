@@ -62,6 +62,11 @@
   </script>
 
   <link rel="stylesheet" href="assets/styles.css">
+  <style>body{opacity:0}body.ready{opacity:1;transition:opacity .12s ease-out}</style>
+  <script>
+    // Apply saved theme before first paint to prevent FOUC
+    (function(){var t=localStorage.getItem('citespend_theme');if(t)document.documentElement.setAttribute('data-theme',t)})();
+  </script>
   <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.js" defer></script>
   <script src="assets/app.js" defer></script>
 </head>

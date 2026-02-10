@@ -1265,6 +1265,7 @@
     document.body.style.margin = '0';
     document.body.style.padding = '0';
     document.body.style.background = '#1a1a1a';
+    document.body.style.opacity = '1';
 
     const pre = document.createElement('pre');
     pre.style.cssText = 'font-family:"SF Mono",Menlo,Consolas,monospace;font-size:13px;line-height:1.5;padding:24px;margin:0;min-height:100vh;color:#e0e0e0;white-space:pre-wrap;word-break:break-word;';
@@ -1910,17 +1911,24 @@
     bindEvents();
     bindWidgetEvents();
 
-    // Initialize Lucide icons
+    // Initialize Lucide icons, then reveal page
+    function revealPage() {
+      document.body.classList.add('ready');
+    }
+
     if (window.lucide) {
       lucide.createIcons();
+      revealPage();
     } else {
       const interval = setInterval(() => {
         if (window.lucide) {
           lucide.createIcons();
           clearInterval(interval);
+          revealPage();
         }
       }, 100);
-      setTimeout(() => clearInterval(interval), 5000);
+      // Reveal anyway after 2s even if Lucide fails to load
+      setTimeout(() => { clearInterval(interval); revealPage(); }, 2000);
     }
 
     // Check URL for ORCID
