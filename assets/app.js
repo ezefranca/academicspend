@@ -1029,17 +1029,41 @@
     showToast('CSV exported successfully.');
   }
 
-  function exportJSON() {
-    const works = state.filteredWorks.length > 0 ? state.filteredWorks : state.works;
-    const data = {
-      orcid: state.orcid,
-      researcherName: state.researcherName,
-      exportedAt: new Date().toISOString(),
-      dataSource: 'OpenAlex',
+  function buildAPIResponse() {
+    const works = state.works;
+    const agg = aggregateData(works);
+
+    return {
+      meta: {
+        api: 'Cite & Spend',
+        version: '1.0.0',
+        disclaimer: 'APC data comes from OpenAlex (apc_paid / apc_list from DOAJ). No fabricated estimates.',
+        generatedAt: new Date().toISOString(),
+        dataSource: 'OpenAlex (https://openalex.org)',
+        orcid: state.orcid,
+        researcherName: state.researcherName || null,
+        worksCount: works.length,
+        htmlUrl: `https://ezefranca.com/academicspend/?orcid=${state.orcid}`,
+      },
+      summary: {
+        totalKnownAPC_USD: Math.round(agg.totalUSD),
+        worksWithKnownFees: agg.counts.known,
+        worksWithUnknownFees: agg.counts.unknown,
+        dateRange: agg.dateRange,
+        currencyBreakdown: agg.currencies,
+        exchangeRatesDate: EXCHANGE_DATE,
+      },
+      spendByYear: Object.entries(agg.byYear)
+        .map(([year, vals]) => ({ year: parseInt(year), known_USD: Math.round(vals.known) }))
+        .sort((a, b) => a.year - b.year),
+      topPublishers: Object.entries(agg.byPublisher)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 20)
+        .map(([name, total]) => ({ publisher: name, totalAPC_USD: Math.round(total) })),
       works: works.map((w) => ({
         year: w.year,
         title: w.title,
-        doi: w.doi,
+        doi: w.doi || null,
         venue: w.venue,
         publisher: w.publisher,
         oaStatus: w.oaStatus,
@@ -1048,10 +1072,13 @@
         currency: w.currency,
         amountUSD: w.amountUSD,
         confidence: w.confidence,
-        source: w.source,
+        sourceNote: w.source,
       })),
     };
+  }
 
+  function exportJSON() {
+    const data = buildAPIResponse();
     const json = JSON.stringify(data, null, 2);
     downloadFile(json, `cite-and-spend-${state.orcid}.json`, 'application/json');
     showToast('JSON exported successfully.');
@@ -1199,57 +1226,11 @@
         return;
       }
 
-      const works = processWorks(data.works);
-      const agg = aggregateData(works);
+      state.orcid = normalized;
+      state.researcherName = data.authorName || '';
+      state.works = processWorks(data.works);
 
-      const response = {
-        meta: {
-          api: 'Cite & Spend',
-          version: '1.0.0',
-          disclaimer: 'This is a static site emulating an API response. Data comes from OpenAlex. APC estimates may not reflect actual charges.',
-          generatedAt: new Date().toISOString(),
-          dataSource: 'OpenAlex (https://openalex.org)',
-          orcid: normalized,
-          researcherName: data.authorName || null,
-          worksCount: works.length,
-          totalCount: data.meta?.count || works.length,
-          capped: data.meta?.capped || false,
-          capLimit: CONFIG.maxWorks,
-          htmlUrl: window.location.origin + window.location.pathname + '?orcid=' + normalized,
-        },
-        summary: {
-          totalKnownAPC_USD: Math.round(agg.totalUSD),
-          worksWithKnownFees: agg.counts.known,
-          worksWithUnknownFees: agg.counts.unknown,
-          dateRange: agg.dateRange,
-          currencyBreakdown: agg.currencies,
-          exchangeRatesDate: EXCHANGE_DATE,
-        },
-        spendByYear: Object.entries(agg.byYear).map(([year, vals]) => ({
-          year: parseInt(year),
-          known_USD: Math.round(vals.known),
-        })).sort((a, b) => a.year - b.year),
-        topPublishers: Object.entries(agg.byPublisher)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 20)
-          .map(([name, total]) => ({ publisher: name, totalAPC_USD: Math.round(total) })),
-        works: works.map((w) => ({
-          year: w.year,
-          title: w.title,
-          doi: w.doi || null,
-          venue: w.venue,
-          publisher: w.publisher,
-          oaStatus: w.oaStatus,
-          feeSignal: w.signal,
-          amount: w.amount,
-          currency: w.currency,
-          amountUSD: w.amountUSD,
-          confidence: w.confidence,
-          sourceNote: w.source,
-        })),
-      };
-
-      renderAPIResponse(response);
+      renderAPIResponse(buildAPIResponse());
     } catch (err) {
       renderAPIResponse({
         error: true,
@@ -1818,9 +1799,9 @@
     const theme = $('#widget-theme')?.value || 'auto';
 
     // API endpoint display
-    const apiUrl = `${baseUrl}?format=json&orcid=${orcid}`;
+    const browserUrl = `${baseUrl}?format=json&orcid=${orcid}`;
     const apiEl = $('#api-endpoint');
-    if (apiEl) apiEl.textContent = apiUrl;
+    if (apiEl) apiEl.textContent = browserUrl;
 
     // Generate embed code based on style
     const shareUrl = `${baseUrl}?orcid=${orcid}`;
@@ -1889,6 +1870,17 @@
         }).catch(() => {
           showToast('Could not copy endpoint.');
         });
+      });
+    }
+
+    const downloadJsonBtn = $('#btn-download-json-api');
+    if (downloadJsonBtn) {
+      downloadJsonBtn.addEventListener('click', () => {
+        if (!state.works || state.works.length === 0) {
+          showToast('Generate a receipt first.');
+          return;
+        }
+        exportJSON();
       });
     }
   }
